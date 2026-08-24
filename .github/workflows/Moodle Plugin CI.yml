@@ -363,7 +363,7 @@ jobs:
           fi
           echo "ESLint --fix modified files; ignoring its exit code ($eslint_exit)."
 
-          plugindir="$(echo "${GITHUB_REPOSITORY}" | cut -d/ -f2 | sed 's/^moodle-//' | tr _ /)"
+          plugindir="$(echo "${GITHUB_REPOSITORY}" | cut -d/ -f2 | sed 's/^moodle-//')"
           rsync -av "${{ github.workspace }}/moodle/public/${plugindir}/." "${{ github.workspace }}/plugin/." --exclude='.git'
 
           cd ${{ github.workspace }}/plugin
@@ -389,7 +389,7 @@ jobs:
           fi
           echo "Stylelint --fix modified files; ignoring its exit code ($stylelint_exit)."
 
-          plugindir="$(echo "${GITHUB_REPOSITORY}" | cut -d/ -f2 | sed 's/^moodle-//' | tr _ /)"
+          plugindir="$(echo "${GITHUB_REPOSITORY}" | cut -d/ -f2 | sed 's/^moodle-//')"
           rsync -av "${{ github.workspace }}/moodle/public/${plugindir}/." "${{ github.workspace }}/plugin/." --exclude='.git'
 
           cd ${{ github.workspace }}/plugin
