@@ -334,12 +334,13 @@ jobs:
       - name: Resolve installed plugin directory
         if: ${{ !cancelled() }}
         run: |
-          component=$(php -r '
-            define("MOODLE_INTERNAL", true);
-            $plugin = new stdClass();
-            include "${{ github.workspace }}/plugin/version.php";
-            echo $plugin->component;
-          ')
+          # Read the component name as plain text rather than executing
+          # version.php. Executing it requires a real Moodle bootstrap:
+          # even with MOODLE_INTERNAL defined, plugins commonly reference
+          # constants like MATURITY_STABLE that only exist after Moodle's
+          # full setup.php has run, causing a fatal error here.
+          versionphp="${{ github.workspace }}/plugin/version.php"
+          component=$(grep -oP "component\s*=\s*['\"]\K[^'\"]+" "$versionphp" | head -n1)
 
           if [ -z "$component" ]; then
             echo "::error::Could not read component name from plugin/version.php"
