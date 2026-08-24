@@ -325,6 +325,33 @@ jobs:
           DB: mariadb
           MOODLE_BRANCH: MOODLE_502_STABLE
 
+      # Resolve the plugin's real installed path inside the Moodle codebase once,
+      # so every fixer below syncs fixes back to the right place. Deriving this
+      # from the repo name (e.g. stripping "moodle-" and swapping "_" for "/")
+      # only works for simple component types; it breaks for subplugins such as
+      # tiny_*, block_*, qtype_*, assignsubmission_*, etc. Instead we look up the
+      # plugin's own declared component and find where Moodle actually put it.
+      - name: Resolve installed plugin directory
+        if: ${{ !cancelled() }}
+        run: |
+          component=$(php -r '
+            $plugin = new stdClass();
+            include "${{ github.workspace }}/plugin/version.php";
+            echo $plugin->component;
+          ')
+
+          versionfile=$(grep -rl "component[[:space:]]*=[[:space:]]*['\"]${component}['\"]" \
+            "${{ github.workspace }}/moodle/public" --include=version.php | head -n1)
+
+          if [ -z "$versionfile" ]; then
+            echo "::error::Could not resolve install path for component $component"
+            exit 1
+          fi
+
+          plugindir="$(dirname "$versionfile" | sed "s#^${{ github.workspace }}/moodle/public/##")"
+          echo "PLUGIN_INSTALL_DIR=$plugindir" >> "$GITHUB_ENV"
+          echo "Resolved $component -> public/$plugindir"
+
       # --- Fixers ---
       # Each fixer commits its own changes (if any) immediately, so the resulting
       # PR contains separate, individually cherry-pickable commits per tool.
@@ -339,6 +366,10 @@ jobs:
             echo "No custom phpcs standard found, using default moodle standard."
             moodle-plugin-ci phpcbf
           fi
+
+          # phpcbf fixes the plugin as installed inside the moodle codebase, not
+          # the ./plugin checkout, so sync the fixes back before committing.
+          rsync -av "${{ github.workspace }}/moodle/public/${PLUGIN_INSTALL_DIR}/." "${{ github.workspace }}/plugin/." --exclude='.git'
 
           cd plugin
           git add -A
@@ -363,8 +394,7 @@ jobs:
           fi
           echo "ESLint --fix modified files; ignoring its exit code ($eslint_exit)."
 
-          plugindir="$(echo "${GITHUB_REPOSITORY}" | cut -d/ -f2 | sed 's/^moodle-//')"
-          rsync -av "${{ github.workspace }}/moodle/public/${plugindir}/." "${{ github.workspace }}/plugin/." --exclude='.git'
+          rsync -av "${{ github.workspace }}/moodle/public/${PLUGIN_INSTALL_DIR}/." "${{ github.workspace }}/plugin/." --exclude='.git'
 
           cd ${{ github.workspace }}/plugin
           git add -A
@@ -389,8 +419,7 @@ jobs:
           fi
           echo "Stylelint --fix modified files; ignoring its exit code ($stylelint_exit)."
 
-          plugindir="$(echo "${GITHUB_REPOSITORY}" | cut -d/ -f2 | sed 's/^moodle-//')"
-          rsync -av "${{ github.workspace }}/moodle/public/${plugindir}/." "${{ github.workspace }}/plugin/." --exclude='.git'
+          rsync -av "${{ github.workspace }}/moodle/public/${PLUGIN_INSTALL_DIR}/." "${{ github.workspace }}/plugin/." --exclude='.git'
 
           cd ${{ github.workspace }}/plugin
           git add -A
