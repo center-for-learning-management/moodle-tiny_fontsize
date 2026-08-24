@@ -325,6 +325,40 @@ jobs:
           DB: mariadb
           MOODLE_BRANCH: MOODLE_502_STABLE
 
+      # Resolve the plugin's real installed path inside the Moodle codebase once,
+      # so every fixer below syncs fixes back to the right place. Deriving this
+      # from the repo name (e.g. stripping "moodle-" and swapping "_" for "/")
+      # only works for simple component types; it breaks for subplugins such as
+      # tiny_*, block_*, qtype_*, assignsubmission_*, etc. Instead we look up the
+      # plugin's own declared component and find where Moodle actually put it.
+      - name: Resolve installed plugin directory
+        if: ${{ !cancelled() }}
+        run: |
+          # Read the component name as plain text rather than executing
+          # version.php. Executing it requires a real Moodle bootstrap:
+          # even with MOODLE_INTERNAL defined, plugins commonly reference
+          # constants like MATURITY_STABLE that only exist after Moodle's
+          # full setup.php has run, causing a fatal error here.
+          versionphp="${{ github.workspace }}/plugin/version.php"
+          component=$(grep -oP "component\s*=\s*['\"]\K[^'\"]+" "$versionphp" | head -n1)
+
+          if [ -z "$component" ]; then
+            echo "::error::Could not read component name from plugin/version.php"
+            exit 1
+          fi
+
+          versionfile=$(grep -rl "component[[:space:]]*=[[:space:]]*['\"]${component}['\"]" \
+            "${{ github.workspace }}/moodle/public" --include=version.php | head -n1)
+
+          if [ -z "$versionfile" ]; then
+            echo "::error::Could not resolve install path for component $component"
+            exit 1
+          fi
+
+          plugindir="$(dirname "$versionfile" | sed "s#^${{ github.workspace }}/moodle/public/##")"
+          echo "PLUGIN_INSTALL_DIR=$plugindir" >> "$GITHUB_ENV"
+          echo "Resolved $component -> public/$plugindir"
+
       # --- Fixers ---
       # Each fixer commits its own changes (if any) immediately, so the resulting
       # PR contains separate, individually cherry-pickable commits per tool.
@@ -339,6 +373,14 @@ jobs:
             echo "No custom phpcs standard found, using default moodle standard."
             moodle-plugin-ci phpcbf
           fi
+
+          # phpcbf fixes the plugin as installed inside the moodle codebase, not
+          # the ./plugin checkout, so sync the fixes back before committing.
+          # Guard against an unset/empty PLUGIN_INSTALL_DIR: without this, the
+          # rsync source below would collapse to "moodle/public/." and copy
+          # the entire Moodle core tree into ./plugin.
+          : "${PLUGIN_INSTALL_DIR:?PLUGIN_INSTALL_DIR is not set - did the resolve step fail?}"
+          rsync -av "${{ github.workspace }}/moodle/public/${PLUGIN_INSTALL_DIR}/." "${{ github.workspace }}/plugin/." --exclude='.git'
 
           cd plugin
           git add -A
@@ -363,8 +405,8 @@ jobs:
           fi
           echo "ESLint --fix modified files; ignoring its exit code ($eslint_exit)."
 
-          plugindir="$(echo "${GITHUB_REPOSITORY}" | cut -d/ -f2 | sed 's/^moodle-//' | tr _ /)"
-          rsync -av "${{ github.workspace }}/moodle/public/${plugindir}/." "${{ github.workspace }}/plugin/." --exclude='.git'
+          : "${PLUGIN_INSTALL_DIR:?PLUGIN_INSTALL_DIR is not set - did the resolve step fail?}"
+          rsync -av "${{ github.workspace }}/moodle/public/${PLUGIN_INSTALL_DIR}/." "${{ github.workspace }}/plugin/." --exclude='.git'
 
           cd ${{ github.workspace }}/plugin
           git add -A
@@ -389,8 +431,8 @@ jobs:
           fi
           echo "Stylelint --fix modified files; ignoring its exit code ($stylelint_exit)."
 
-          plugindir="$(echo "${GITHUB_REPOSITORY}" | cut -d/ -f2 | sed 's/^moodle-//' | tr _ /)"
-          rsync -av "${{ github.workspace }}/moodle/public/${plugindir}/." "${{ github.workspace }}/plugin/." --exclude='.git'
+          : "${PLUGIN_INSTALL_DIR:?PLUGIN_INSTALL_DIR is not set - did the resolve step fail?}"
+          rsync -av "${{ github.workspace }}/moodle/public/${PLUGIN_INSTALL_DIR}/." "${{ github.workspace }}/plugin/." --exclude='.git'
 
           cd ${{ github.workspace }}/plugin
           git add -A
