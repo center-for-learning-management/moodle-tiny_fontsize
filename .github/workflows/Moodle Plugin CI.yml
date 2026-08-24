@@ -335,10 +335,16 @@ jobs:
         if: ${{ !cancelled() }}
         run: |
           component=$(php -r '
+            define("MOODLE_INTERNAL", true);
             $plugin = new stdClass();
             include "${{ github.workspace }}/plugin/version.php";
             echo $plugin->component;
           ')
+
+          if [ -z "$component" ]; then
+            echo "::error::Could not read component name from plugin/version.php"
+            exit 1
+          fi
 
           versionfile=$(grep -rl "component[[:space:]]*=[[:space:]]*['\"]${component}['\"]" \
             "${{ github.workspace }}/moodle/public" --include=version.php | head -n1)
@@ -369,6 +375,10 @@ jobs:
 
           # phpcbf fixes the plugin as installed inside the moodle codebase, not
           # the ./plugin checkout, so sync the fixes back before committing.
+          # Guard against an unset/empty PLUGIN_INSTALL_DIR: without this, the
+          # rsync source below would collapse to "moodle/public/." and copy
+          # the entire Moodle core tree into ./plugin.
+          : "${PLUGIN_INSTALL_DIR:?PLUGIN_INSTALL_DIR is not set - did the resolve step fail?}"
           rsync -av "${{ github.workspace }}/moodle/public/${PLUGIN_INSTALL_DIR}/." "${{ github.workspace }}/plugin/." --exclude='.git'
 
           cd plugin
@@ -394,6 +404,7 @@ jobs:
           fi
           echo "ESLint --fix modified files; ignoring its exit code ($eslint_exit)."
 
+          : "${PLUGIN_INSTALL_DIR:?PLUGIN_INSTALL_DIR is not set - did the resolve step fail?}"
           rsync -av "${{ github.workspace }}/moodle/public/${PLUGIN_INSTALL_DIR}/." "${{ github.workspace }}/plugin/." --exclude='.git'
 
           cd ${{ github.workspace }}/plugin
@@ -419,6 +430,7 @@ jobs:
           fi
           echo "Stylelint --fix modified files; ignoring its exit code ($stylelint_exit)."
 
+          : "${PLUGIN_INSTALL_DIR:?PLUGIN_INSTALL_DIR is not set - did the resolve step fail?}"
           rsync -av "${{ github.workspace }}/moodle/public/${PLUGIN_INSTALL_DIR}/." "${{ github.workspace }}/plugin/." --exclude='.git'
 
           cd ${{ github.workspace }}/plugin
