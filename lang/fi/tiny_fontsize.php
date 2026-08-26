@@ -26,7 +26,7 @@
 defined('MOODLE_INTERNAL') || die();
 
 $string['button_fontsize'] = 'Kirjasinkoko';
+$string['fontsize:use'] = "Salli lisäosan käyttö";
 $string['menuitem_fontsize'] = 'Kirjasinkoko';
 $string['pluginname'] = 'Kirjasinkoko-lisäosa';
 $string['privacy:metadata'] = 'Kirjasinkoko-lisäosa ei tallentaa henkilötietoja.';
-$string['fontsize:use'] = "Salli lisäosan käyttö";
